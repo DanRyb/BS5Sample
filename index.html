@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="X-UA-Compatible" content="IE-Edge" />
+    <link rel="stylesheet" href="bootstrap5.min.css" />
+    <link rel="stylesheet" href="style.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdn.datatables.net/2.0.2/css/dataTables.bootstrap5.min.css"
+    />
+    <title>Symitar User Lookup System</title>
+  </head>
+  <body>
+    <div id="page-header">
+      <table class="pageHeader">
+        <tr>
+          <td style="vertical-align: middle">
+            <b>Symitar User Lookup - Account 0123456789</b>
+            Account Type: 0 - General Membership
+          </td>
+          <td class="pageHeader pageHeaderName">Primary Member - John M Doe</td>
+        </tr>
+      </table>
+    </div>
+    <div id="cu-logo" class="m-4">
+      <img src="1st-united-credit-union.svg" />
+    </div>
+    <div class="container-fluid">
+      <div class="card">
+        <div class="card-body">
+          <table
+            id="dtUserInfo"
+            class="table table-striped table-hover table-sm"
+          >
+            <thead>
+              <th>User #</th>
+              <th>Employee Name</th>
+              <th>Job Title</th>
+              <th>Assigned Branch/Department</th>
+              <th>Status</th>
+            </thead>
+            <tbody class="table-group-divider">
+              <tr>
+                <td>1239</td>
+                <td>Dan Rybczyk</td>
+                <td>Developer II</td>
+                <td>EA&D</td>
+                <td>Current</td>
+              </tr>
+              <tr>
+                <td>1145</td>
+                <td>Jane Doe</td>
+                <td>Branch Manager</td>
+                <td>RDO</td>
+                <td>Current</td>
+              </tr>
+              <tr>
+                <td>1075</td>
+                <td>Leah Jones</td>
+                <td>Accountant I</td>
+                <td>Accounting</td>
+                <td>Current</td>
+              </tr>
+              <tr>
+                <td class="text-danger">1073</td>
+                <td class="text-danger"> Jim Smith</td>
+                <td class="text-danger">Collector</td>
+                <td class="text-danger">Loss Mitigation</td>
+                <td class="text-danger">Former</td>
+              </tr>
+              <tr>
+                <td>1005</td>
+                <td>Steve Schiro</td>
+                <td>Director of Development</td>
+                <td>EA&D</td>
+                <td>Current</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <br />
+    <table class="mx-auto">
+      <tr>
+        <td class="text-center" id="continue">
+          <input type="hidden" name="ExitApp" id="ExitApp" value="" />
+          <button
+            type="button"
+            class="btn btn-primary"
+            onClick="submitNo();"
+            value="Exit"
+          >
+            Close
+          </button>
+        </td>
+      </tr>
+    </table>
+  </body>
+  <script
+    src="https://code.jquery.com/jquery-3.7.1.min.js"
+    integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo="
+    crossorigin="anonymous"
+  ></script>
+  <script type="text/javascript" src="bootstrap5.bundle.min.js"></script>
+  <script
+    type="text/javascript"
+    src="https://cdn.datatables.net/2.0.2/js/dataTables.min.js"
+  ></script>
+  <script
+    type="text/javascript"
+    src="https://cdn.datatables.net/2.0.2/js/dataTables.bootstrap5.min.js"
+  ></script>
+  <script>
+    $(function () {
+      $("#dtUserInfo").DataTable({});
+    });
+  </script>
+</html>
