@@ -1,0 +1,171 @@
+#PROMO.CFG.415                                                                                                                  
+#Marketing promo to be put on Account Tracking Type 35 User Numbers 1-6
+#Used by CFCU.PROMO.SWEEP.FM and CFCU.PROMO.DEMAND.FM
+#
+#             !!!!!!!!WARNING THE CODE READS BY FIXED LENGTH!!!!!!!!!!
+#             !!!MAKE SURE YOUR DATA IS PUT IN THE PROPER POSITIONS!!!
+#
+#4 digit promo 	        (1,4)   = Zero padded
+#Promo amount           (6,11)  - Maximum of 999.99.  Left Justified
+#Promo Start Date       (14,21)
+#Promo End Date         (24,31)
+#Promo Desc             (34,49)
+#Days allowed           (52,53) - Zero padded
+#                                 This is the number of days a member has to perform an action from account opening.
+#                                 Example: Sign up for eStatements, PC Access, etc...
+#Hold type              (57,57) - M = Month, D = Days
+#Hold length            (61,62) - Zero padded, Number of Days or Months
+#Share Type             (65,68) - Share Type for funds to deposit to/withdraw from
+#User GL Code           (71,73) - Zero padded, GL to debit/credit.  Get from Accounting
+#Promo Type             (76,76) - A = Savings Only, no checking, no card
+#                               - B = Bill Payment (checks for Bill Payment History Transaction with the last 6 months)
+#                               - C = New Member (requires Mobile Banking)
+#                               - D = Direct Deposit (this is tied to promo 275)
+#                               - E = eNotice (checks for eNotice)
+#                               - F = Foreign (checks for Foreign accounts)
+#                               - H = HSA Membership ($25 Single/$50 Joint)
+#                               - I = New Born (checks for 1 year or younger)
+#                               - L = Mobile Banking (Last HB Logon Time by User 810 in last year)
+#                               - M = MySavings (checks for under 22, Savings and MySavings)
+#                               - N = New Member (checks for Savings, Checking and ATM/Debit Card)
+#                                     Chevron Employees for initial credit, eStatement and Direct Deposit
+#                               - P = PC Access (checks for PC Access enrollment)
+#                               - R = Refer a Friend
+#                               - S = eStatements (checks for eStatements)
+#                               - U = Sunlight Solar Membership Promo
+#                               - X = eDeposit (makes an edeposit-uploads a check, or deposit on mobile)
+#                               - W = ATM Convenience (checks for 3 deposits/withdrawals from CU ATMs)
+#                               - Leave Blank for no checks and no insertion of promo into account field
+#Brand Code             (79,82) - BC01 = Chevron, BC02 = Spectrum
+#Second Credit Amount   (84,89) - Maximum of 999.99. Left Justified. For A & N promotions only
+#Comment (Optional)     (90,114)- 25 Character Optional Comment to Add
+#
+#  REMOVE ANY PROMOTIONS THAT HAVE EXPIRED FOR OVER 1 YEAR AND 2 MONTHS
+#
+#0000000011111111112222222222333333333344444444445555555555666666666677777777778888888888999999999900000000001111111111
+#2345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789
+
+#Chevron Federal Credit Union
+0014 25.00                       Newborn Promo          M   12  0001  123  I  BC01
+0094 25.00   01/01/12            BD New Mbr Promo  32   M   12  0001  109  N  BC01 25.00
+0116 25.00                       Foreign Promo          M   12  0001  109  F  BC01
+0222 25.00                       My Savings Promo       M   12  0001  109  M  BC01 
+0275 25.00   09/09/13            ChevGasEmpPromo   32   M   12  0001  109  N  BC01 25.00
+0285 25.00   09/09/13            ChevGas DD Promo               0001  109  D  BC01
+0297 25.00   03/20/14            BusDev Sav Promo  32   M   12  0001  109  A  BC01 25.00
+0312 25.00   09/01/14            CCCHS Busi Dev    32   M   12  0001  109  N  BC01  5.00   
+0395 10.00   07/01/17  12/31/18  Go Green Promo                 0001  072  S  BC01
+0412 25.00   01/02/18  12/31/18  Refer a Frnd                   0001  111  R  BC01
+0414 25.00   12/01/17            CCCHS Busi Dev    32   M   12  0001  109  C  BC01  5.00
+0415 10.00   02/01/18  02/28/18  Mobile Bank Promo              0001  117  L  BC01
+0418 25.00   03/01/18  04/13/18  New Mbr 6 for 50  32   M   12  0001  109  C  BC01 25.00
+0419 25.00   03/01/18  04/13/18  MySav Mbrsp Dr         M   12  0001  109  M  BC01
+
+#EXPIRED DO NOT REMOVE UNTIL 14 MONTHS OLD
+0121 50.00             01/25/18  Inact Auto Promo               0001  112     BC01     
+0122 50.00             01/25/18  Inact RE Promo                 0001  112     BC01     
+0123 50.00             01/25/18  Inact Chk Promo                0001  112     BC01     
+0124 25.00             01/25/18  Inact LOC Promo                0001  112     BC01  
+0210 10.00   01/01/12  10/07/16  Anv PC Access                  0001  112  P  BC01
+0211  5.00   01/01/12  10/07/16  Anv eStatements                0001  072  S  BC01
+0214  5.00   01/01/12  10/07/16  Anv eNotice                    0001  072  E  BC01
+0215 10.00   01/01/12  10/07/16  Anv Bill Payment               0001  113  B  BC01
+0361 25.00   03/01/16  04/30/16  New Mbr Promo     32   M   12  0001  109  N  BC01 25.00
+0362 25.00   03/01/16  04/30/16  New Rfr a Friend               0001  111  R  BC01
+0363 25.00   03/01/16  04/30/16  MySav Mbrsp Dr         M   12  0001  109  M  BC01
+0364 10.00   03/01/16  04/30/16  MySav Rfr a Frnd               0001  111  R  BC01
+0368 10.00   07/01/16  07/31/16  PC Access Promo                0001  112  P  BC01
+0370 10.00   06/01/16  06/30/16  Go Green Promo                 0001  072  S  BC01
+0371 25.00   05/11/16  01/25/18  BD Refer a Frnd                0001  111  R  BC01
+0372 10.00   05/11/16  01/25/18  BD MySav RfrFrnd               0001  111  R  BC01 
+0375 25.00   08/31/16  11/30/16  New Mbr 6 for 50  32   M   12  0001  109  C  BC01 25.00                     
+0376 25.00   08/31/16  11/30/16  Rfr a Frnd 6for50              0001  111  R  BC01
+0382 10.00   11/03/16  12/31/16  Mobile Banking                 0001  117  L  BC01
+0383 25.00   01/01/17  12/31/17  Refer a Frnd                   0001  111  R  BC01  
+0386 25.00   03/01/17  05/06/17  New Mbr 6 for 50  32   M   12  0001  109  C  BC01 25.00
+0387 25.00   03/01/17  05/06/17  MySav Mbrsp Dr         M   12  0001  109  M  BC01
+0388 10.00   03/01/17  03/31/17  Mobile Bank Promo              0001  117  L  BC01
+0393 10.00   06/01/17  06/30/17  Go Green Promo                 0001  072  S  BC01
+0394 10.00   06/19/17  07/14/17  Mobile Bank Promo              0001  117  L  BC01
+0396 10.00   08/01/17  08/31/17  PC Access Promo                0001  112  P  BC01
+0397 25.00   08/01/17  08/31/17  New Mbr 6 for 50  32   M   12  0001  109  C  BC01 25.00
+0399 10.00   07/01/17  07/31/17  eDeposit Promo                 0001  126  X  BC01
+0400 25.00   08/01/17  08/31/17  MySav Mbrsp Dr         M   12  0001  109  M  BC01
+0402 10.00   09/01/17  09/30/17  Mobile Bank Promo              0001  117  L  BC01
+0405 10.00   10/01/17  10/31/17  eDeposit Promo                 0001  126  X  BC01
+0401 25.00   10/01/17  11/30/17  HSA Promotion          M   12  0001  109  H  BC01 25.00
+0404 10.00   09/26/17  12/15/17  ATM Convenience                0001  130  W  BC01
+0406 25.00   11/01/17  12/09/17  New Mbr 6 for 50  32   M   12  0001  109  C  BC01 25.00
+0407 10.00   11/01/17  11/30/17  Mobile Bank Promo              0001  117  L  BC01
+0408 10.00   12/01/17  12/31/17  PC Access Promo                0001  112  P  BC01
+0411 25.00   11/01/17  12/09/17  MySav Mbrsp Dr         M   12  0001  109  M  BC01
+
+
+
+#0000000011111111112222222222333333333344444444445555555555666666666677777777778888888888999999999900000000001111111111
+#2345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789
+
+#Spectrum Credit Union
+2003 25.00                       Newborn Promo          M   12  0001  123  I  BC02
+2038 25.00                       Foreign Promo          M   12  0001  109  F  BC02
+2094 25.00   01/01/12            BD New Mbr Promo  32   M   12  0001  109  N  BC02 25.00
+2222 25.00                       My Savings Promo       M   12  0001  109  M  BC02
+2062 25.00   03/20/14            BusDev Sav Promo  32   M   12  0001  109  A  BC02 25.00
+2065 25.00   04/15/14            Craft 6 for $50   32   M   12  0001  109  C  BC02 25.00 CRAFT PROFESSIONAL
+2100 25.00   02/01/15            Safari 6for50 BD  32   M   12  0001  109  C  BC02 25.00
+2101 25.00   02/01/15            Safari MySav BD   32   M   12  0001  109  M  BC02
+2104 25.00   03/01/15            PMI 6for50        32   M   12  0001  109  C  BC02 25.00
+2105 25.00   03/01/15            PMI Rfr a Friend               0001  111  R  BC02
+2106 10.00   03/01/15            Safari MySav Ref               0001  111  R  BC02
+2107 25.00   03/01/15            PMI MySav         32   M   12  0001  109  M  BC02
+2108 10.00   03/01/15            PMI MySaf Ref                  0001  111  R  BC02
+2166 25.00   05/01/17            Snlight Mbr Promo 32   M   12  0001  109  U  BC02 25.00
+2171 10.00   07/01/17  12/31/18  Go Green Promo                 0001  072  S  BC02   
+2180 25.00   09/28/17            Social Media Ad   32   M   12  0001  109  A  BC02      
+2191 25.00   01/02/18  12/31/18  Refer a Frnd                   0001  111  R  BC02
+2192 25.00   12/01/17            CCCHS Busi Dev    32   M   12  0001  109  C  BC02  5.00
+2193 10.00   02/01/18  02/28/18  Mobile Bank Promo              0001  117  L  BC02
+2196 25.00   03/01/18  04/13/18  New Mbr 6 for 50  32   M   12  0001  109  C  BC02 25.00
+2197 25.00   03/01/18  04/13/18  MySav Mbrsp Dr         M   12  0001  109  M  BC02
+
+#EXPIRED DO NOT REMOVE UNTIL 14 MONTHS OLD
+2010 10.00   10/01/12  10/07/16  Anv PC Access                  0001  112  P  BC02
+2011  5.00   10/01/12  10/07/16  Anv eStatements                0001  072  S  BC02
+2014  5.00   10/01/12  10/07/16  Anv eNotice                    0001  072  E  BC02
+2015 10.00   10/01/12  10/07/16  Anv Bill Payment               0001  113  B  BC02
+2081 25.00   09/01/14  01/25/18  CCCHS Busi Dev    32   M   12  0001  109  N  BC02  5.00
+2111 25.00   03/01/15  01/25/18  Safari Rfr Frnd                0001  111  R  BC02
+2121 50.00             01/25/18  Inact Auto Promo               0001  112     BC02     
+2122 50.00             01/25/18  Inact RE Promo                 0001  112     BC02     
+2123 50.00             01/25/18  Inact Chk Promo                0001  112     BC02     
+2124 25.00             01/25/18  Inact LOC Promo                0001  112     BC02
+2132 25.00   03/01/16  04/30/16  New Mbr Promo     32   M   12  0001  109  N  BC02 25.00
+2134 25.00   03/01/16  04/30/16  New Rfr a Friend               0001  111  R  BC02
+2135 25.00   03/01/16  04/30/16  MySav Mbrsp Dr         M   12  0001  109  M  BC02
+2136 10.00   03/01/16  04/30/16  MySav Rfr a Frnd               0001  111  R  BC02
+2139 10.00   07/01/16  07/31/16  PC Access Promo                0001  112  P  BC02
+2141 10.00   06/01/16  09/08/16  Go Green Promo                 0001  072  S  BC02
+2142 25.00   05/11/16  01/25/18  BD Refer a Frnd                0001  111  R  BC02
+2143 10.00   05/11/16  01/25/18  BD MySav RfrFrnd               0001  111  R  BC02  
+2145 25.00   07/01/16  12/31/16  Safari FPMySavBD  32   M   12  0001  109  M  BC02
+2147 25.00   08/31/16  11/30/16  New Mbr 6 for 50  32   M   12  0001  109  C  BC02 25.00                     
+2148 25.00   08/31/16  11/30/16  Rfr a Frnd 6for50              0001  111  R  BC02
+2156 10.00   11/03/16  12/31/16  Mobile Banking                 0001  117  L  BC02 
+2157 25.00   01/01/17  12/31/17  Refer a Frnd                   0001  111  R  BC02
+2160 25.00   03/01/17  05/06/17  New Mbr 6 for 50  32   M   12  0001  109  C  BC02 25.00
+2161 25.00   03/01/17  05/06/17  MySav Mbrsp Dr         M   12  0001  109  M  BC02
+2162 10.00   03/01/17  03/31/17  Mobile Bank Promo              0001  117  L  BC02  
+2169 10.00   06/01/17  06/30/17  Go Green Promo                 0001  072  S  BC02
+2170 10.00   06/19/17  07/14/17  Mobile Bank Promo              0001  117  L  BC02      
+2173 10.00   08/01/17  08/31/17  PC Access Promo                0001  112  P  BC02
+2174 25.00   08/01/17  08/31/17  New Mbr 6 for 50  32   M   12  0001  109  C  BC02 25.00 
+2176 10.00   07/01/17  07/31/17  eDeposit Promo                 0001  126  X  BC02
+2177 25.00   08/01/17  08/31/17  MySav Mbrsp Dr         M   12  0001  109  M  BC02
+2178 25.00   10/01/17  11/30/17  HSA Promotion          M   12  0001  109  H  BC02 25.00
+2179 10.00   09/01/17  09/30/17  Mobile Bank Promo              0001  117  L  BC02
+2182 10.00   09/26/17  12/15/17  ATM Convenience                0001  130  W  BC02
+2183 10.00   10/01/17  10/31/17  eDeposit Promo                 0001  126  X  BC02
+2184 25.00   11/01/17  12/09/17  New Mbr 6 for 50  32   M   12  0001  109  C  BC02 25.00
+2185 10.00   11/01/17  11/30/17  Mobile Bank Promo              0001  117  L  BC02
+2186 10.00   12/01/17  12/31/17  PC Access Promo                0001  112  P  BC02
+2190 25.00   11/01/17  12/09/17  MySav Mbrsp Dr         M   12  0001  109  M  BC02

@@ -1,0 +1,1111 @@
+[REPORT: CFCU.PROMO.SWEEP.FM
+ DESCRIPTION: Reads help file 00045 for a promo code and gets the
+              User GL to debit/credit, promo amount, promo start date
+              promo end date, promo transaction description, comment to
+              place on account, days for allowed, time to hold if any
+ WORK ORDER: Marketing Promo
+ 
+ TYPE: Batch
+ AUTHOR: Eric Ngan
+ DATE CREATED: 01/17/2012
+ TARGET AUDIENCE/REQUESTOR: Marketing, Charlotte Williams
+ USAGE FREQUENCY: Daily
+ * Last Run Date/Time: 09/24/2017 22:01
+
+
+          REVISION HISTORY
+ =============================================================================
+ DATE      REV. BY        WORK ORDER  CHANGE MADE
+ -----------------------------------------------------------------------------               
+ 08/16/13  Eric Ngan                  Revised code to look for Bill Pay Service
+                                      Code instead of looking at dates.
+
+ 11/08/13  Eric Ngan                  Revised PC Access check to see last year
+ 
+ 12/13/13  Eric Ngan                  Adding logic for Chevron Gas Direct Deposit
+ 
+ 03/25/14  Eric Ngan      INC0048207  Add New Member promotion savings only
+ 
+ 09/08/14  Eric Ngan      INC0054214  Changed code to allow a different amount
+                                      for the second credit of A and N promos
+
+ 10/29/14  Eric Ngan                  Uppercase when reading in Help File
+ 
+ 04/18/16  Eric Ngan      INC0074735  Change to allow input of promo prior
+ 
+ 08/02/16  CMB            EDR0001214  Add New Member 6 for $50 (C) promotion
+ 10/31/16  CMB            EDR0001252  Check for new Promotion Type L (Mobile Banking-
+                                      look at Last HB Logon Time by user 810 in
+                                      last year) by looking through FM History 
+                                      for updated Last HB Logon Time by User 810.
+                                      If found, credit the promotion, remove from
+                                      the tracking record, and place note.
+ 11/03/16  CMB            EDR0001223  Change report to look through 6 months of
+                                      transaction history for a Bill Pay trans
+                                      instead of Service Code80 on share records.
+                                      Set note to expire 6 months from systemdate.
+ 01/19/17  CMB            INC0085350  Change ADDITIONALCOMMENT to "No Further Action 
+                                      or Promo Code Expired" instead of "No Further
+                                      Action or Expired" when PROMOFOUND=FALSE
+ 02/09/17  CMB            INC0085515  Added PROMOEXPIRATION>SYSTEMDATE to PROMOFOUND=TRUE
+                                      If statement check the promo expiration date on account
+                                      tracking in case date on tracking is still valid when
+                                      the promo expiration date has expired in help
+                                      file.   
+                                      Added message if mobile banking promo date has expired.     
+ 04/13/17  CMB            INC0089038  Changed STARTDATE and ENDDATE variables to use PROMOINDEX
+                                      arrays for Mobile criteria.        
+ 05/12/17  CMB            INC0090440  Separate New Member Promo w/ Mobile (Promo type C) from 
+                                      other New Member Promo (Promo types A, N, and S) criteria 
+                                      for easier troubleshooting and future modifications.    
+ 06/28/17  CMB            INC0091788  Add promo criteria for eDeposit promo (promo type X)  
+ 07/27/17  CMB            INC0093383  Change the criteria for HB Last Logon Date to use PC
+                                      Access promo date range instead of 12 month period in 
+                                      PC Access (P) promo type.
+ 08/15/17  CMB            INC0094128  Add criteria for Mobile Deposits to eDepsoit promo
+ 09/25/17  CMB            EDR0001387  Add criteria for ATM Convenience Promo Type "W" 
+ 12/29/17  CMB            INC0099709  Remove criteria for only CFCU/Spectrum ATMs on 
+                                      promo type "W". Need 3 deposits/withdrawals at
+                                      any ATM to receive promo credit.
+ -----------------------------------------------------------------------------
+]
+
+TARGET=ACCOUNT
+
+DEFINE
+ #INCLUDE "CFCU.DEF"
+ #INCLUDE "RD.OUTPUT.DEF"
+ RHSPECFILENAME="CFCU.PROMO.SWEEP.FM"
+ HELPFILE="PROMO.CFG.415"
+ PROMONOTECODE=47
+ PROMODEPOSITREPORT="Promo Deposit FM"   [ Name of the report that will be used to post deposit ]
+ PROMOAUDITREPORT="Promo Audit Report"
+ PROMOFMREPORT="Promo Fields FM"  [ Name of report that will be used to FM share ]
+ TRUE=1
+ FALSE=0
+
+ OC2=NUMBER
+ OC3=NUMBER
+ I=NUMBER
+ 
+ PROMOCODE=NUMBER
+ PROMOEXPIRATION=DATE
+ PROMOFIELDS=CHARACTER ARRAY(999,13)
+ PROMOCOUNT=NUMBER
+ REPORTCODEINDEX=NUMBER
+ ADDCHARGEOFFCOMMENT=NUMBER
+ ADDITIONALCOMMENT=CHARACTER
+ HOLDUNTIL=DATE
+ STARTDATE=DATE
+ ENDDATE=DATE
+ FNUM=NUMBER
+ FLINE=CHARACTER
+ ERRORTEXT=CHARACTER
+ PROMOINDEX=NUMBER
+ SHAREFOUND=NUMBER
+ SHAREID=CHARACTER
+ SHAREIDDIVARRAY=CHARACTER ARRAY(6)     [Used to keep track of shares being credited]
+ SHAREDIVYTDARRAY=MONEY ARRAY(6)        [Used to keep track of shares being credited]
+ SHARELASTDIVDATEARRAY=DATE ARRAY(6)    [Used to keep track of shares being credited]
+ SHARELASTDIVAMOUNTARRAY=MONEY ARRAY(6) [Used to keep track of shares being credited]
+ SHAREDIVFROMOPENARRAY=MONEY ARRAY(6)   [Used to keep track of shares being credited]
+ SHAREDIVINDEX=NUMBER
+ SHAREDIVAVAILABLE=NUMBER
+ SHAREDIVYTD=MONEY
+ SHARELASTDIVDATE=DATE
+ SHARELASTDIVAMOUNT=MONEY
+ SHAREDIVFROMOPEN=MONEY 
+ EXPIREDENROLLDATE=NUMBER
+ ESTATEMENTENROLLED=NUMBER
+ PCACCESSFOUND=NUMBER
+ ENOTICEFOUND=NUMBER
+ BILLPAYFOUND=NUMBER
+ DIRECTDEPOSITFOUND=NUMBER
+ PROMOFOUND=NUMBER
+ CHARGEOFFFOUND=NUMBER
+ TOTALCREDITS=MONEY
+ PROMOCODETOMOVE=NUMBER
+ FIRST=NUMBER
+ TRACKINGLOCATOR=NUMBER
+ AMOUNTTOCREDIT=CHARACTER
+ FOUNDMOBILE=NUMBER
+ ESTATEFOUND=NUMBER
+ FOUNDEDEPOSIT=NUMBER
+ FOUNDMOBILEDEP=NUMBER
+ TRANSHRID=CHARACTER
+ ATMTRANCOUNT=NUMBER
+ SEQNUMB=NUMBER
+END
+
+SETUP
+ #INCLUDE "CFCU.SET"
+ FIRST=TRUE
+ CALL READPROMOHELPFILE
+ OUTPUTOPEN(OUTPUTDEVREPORT,0,PROMODEPOSITREPORT,"",OC2,ERRORTEXT)
+ OUTPUTOPEN(OUTPUTDEVREPORT,0,PROMOAUDITREPORT,"",OC3,ERRORTEXT)
+END
+
+SELECT
+ ACCOUNT:CLOSEDATE='--/--/--' AND
+ TRACKING:EXPIREDATE='--/--/--' AND
+ TRACKING:TYPE=35 AND
+ (TRACKING:USERNUMBER1<>0 OR
+  TRACKING:USERNUMBER2<>0 OR
+  TRACKING:USERNUMBER3<>0 OR
+  TRACKING:USERNUMBER4<>0 OR
+  TRACKING:USERNUMBER5<>0 OR
+  TRACKING:USERNUMBER6<>0)
+END
+
+PRINT TITLE=PROMOFMREPORT
+ CALL INITIALIZEDIVARRAYS
+ IF FIRST=TRUE THEN
+  DO
+   FIRST=FALSE
+   OUTPUTSWITCH(OC3,ERRORTEXT)
+   PRINT "Promo Audit Report   "
+   PRINT SYSTEMDATE
+   NEWLINE
+   NEWLINE
+   COL=001 "ACCOUNT"
+   COL=015 "SHARE"
+   COL=023 "PROMO"
+   COL=035 "AMOUNT"
+   COL=045 "COMMENT"
+   NEWLINE
+   OUTPUTSWITCH(OUTPUTCHANNELDEFAULT,ERRORTEXT)
+  END
+ CHARGEOFFFOUND=FALSE
+ FOR EACH SHARE WITH (SHARE:CLOSEDATE='--/--/--' AND
+                      (SHARE:CHARGEOFFDATE<>'--/--/--' OR
+                       SHARE:TYPE=99))
+  DO
+   CHARGEOFFFOUND=TRUE
+  END
+ FOR EACH LOAN WITH (LOAN:CLOSEDATE='--/--/--' AND
+                     (LOAN:CHARGEOFFDATE<>'--/--/--' OR
+                      LOAN:TYPE=99))
+  DO
+   CHARGEOFFFOUND=TRUE
+  END
+  
+ TRACKINGLOCATOR=0
+ FOR EACH TRACKING WITH (TRACKING:TYPE=35 AND
+                         TRACKING:EXPIREDATE='--/--/--')
+  DO
+   TRACKINGLOCATOR=TRACKING:LOCATOR
+   IF TRACKING:USERNUMBER1<>0 THEN
+    DO
+     REPORTCODEINDEX=1
+     PROMOCODE=TRACKING:USERNUMBER1
+     PROMOEXPIRATION=TRACKING:USERDATE2
+     CALL SWEEPPROMO
+    END
+   IF TRACKING:USERNUMBER2<>0 THEN
+    DO
+     REPORTCODEINDEX=2
+     PROMOCODE=TRACKING:USERNUMBER2
+     PROMOEXPIRATION=TRACKING:USERDATE3
+     CALL SWEEPPROMO
+    END
+   IF TRACKING:USERNUMBER3<>0 THEN
+    DO
+     REPORTCODEINDEX=3
+     PROMOCODE=TRACKING:USERNUMBER3
+     PROMOEXPIRATION=TRACKING:USERDATE4
+     CALL SWEEPPROMO
+    END
+   IF TRACKING:USERNUMBER4<>0 THEN
+    DO
+     REPORTCODEINDEX=4
+     PROMOCODE=TRACKING:USERNUMBER4
+     PROMOEXPIRATION=TRACKING:USERDATE5
+     CALL SWEEPPROMO
+    END
+   IF TRACKING:USERNUMBER5<>0 THEN
+    DO
+     REPORTCODEINDEX=5
+     PROMOCODE=TRACKING:USERNUMBER5
+     PROMOEXPIRATION=TRACKING:USERDATE6
+     CALL SWEEPPROMO
+    END
+   IF TRACKING:USERNUMBER6<>0 THEN
+    DO
+     REPORTCODEINDEX=6
+     PROMOCODE=TRACKING:USERNUMBER6
+     PROMOEXPIRATION=TRACKING:USERDATE7
+     CALL SWEEPPROMO
+    END
+  END
+END
+
+TOTAL
+ OUTPUTSWITCH(OC3,ERRORTEXT)
+ NEWLINE
+ NEWLINE
+ PRINT "Total Credit Deposits:    "
+ PRINT TOTALCREDITS
+ OUTPUTSWITCH(OUTPUTCHANNELDEFAULT,ERRORTEXT)
+
+ FILECLOSE(FNUM,ERRORTEXT)
+END
+
+PROCEDURE INITIALIZEDIVARRAYS
+ FOR I=0 TO 6
+  DO
+   SHAREIDDIVARRAY(I)=""
+   SHAREDIVYTDARRAY(I)=$0.00
+   SHARELASTDIVDATEARRAY(I)='--/--/--'
+   SHARELASTDIVAMOUNTARRAY(I)=$0.00
+   SHAREDIVFROMOPENARRAY(I)=$0.00
+  END
+END
+
+[Help file is fixed length so must be entered in correct positions]
+PROCEDURE READPROMOHELPFILE
+ FILEOPEN("HELP",HELPFILE,"READ",FNUM,ERRORTEXT)
+ FILEREADLINE(FNUM,FLINE,ERRORTEXT)
+ WHILE ERRORTEXT=""
+  DO
+   IF SEGMENT(FLINE,1,1)<>"#" AND LENGTH(FLINE)>0 AND FLINE<>"" THEN
+    DO
+     IF VALUE(SEGMENT(FLINE,1,4))<>0 THEN
+      DO
+       PROMOFIELDS(PROMOCOUNT,0)=SEGMENT(FLINE,1,4)      [Promo #]
+       PROMOFIELDS(PROMOCOUNT,1)=SEGMENT(FLINE,6,11)     [Amount]
+       PROMOFIELDS(PROMOCOUNT,2)=SEGMENT(FLINE,14,21)    [Start Date]
+       PROMOFIELDS(PROMOCOUNT,3)=SEGMENT(FLINE,24,31)    [End Date]
+       PROMOFIELDS(PROMOCOUNT,4)=SEGMENT(FLINE,34,49)    [Transaction Desc]
+       PROMOFIELDS(PROMOCOUNT,5)=SEGMENT(FLINE,52,53)    [Days allowed]
+       PROMOFIELDS(PROMOCOUNT,6)=UPPERCASE(SEGMENT(FLINE,57,57))    [Hold Type]
+       PROMOFIELDS(PROMOCOUNT,7)=SEGMENT(FLINE,61,62)  [Hold Length]
+       PROMOFIELDS(PROMOCOUNT,8)=SEGMENT(FLINE,65,68)  [Share Type]
+       PROMOFIELDS(PROMOCOUNT,9)=SEGMENT(FLINE,71,73) [User GL Code]
+       PROMOFIELDS(PROMOCOUNT,10)=UPPERCASE(SEGMENT(FLINE,76,76)) [Promo Type]
+       PROMOFIELDS(PROMOCOUNT,11)=SEGMENT(FLINE,79,82) [Brand Code]
+       PROMOFIELDS(PROMOCOUNT,12)=SEGMENT(FLINE,84,89) [Second Credit Amount]
+       PROMOCOUNT=PROMOCOUNT+1
+      END
+    END
+   FILEREADLINE(FNUM,FLINE,ERRORTEXT)
+  END
+END                
+
+PROCEDURE SWEEPPROMO
+ ADDCHARGEOFFCOMMENT=FALSE
+ SHAREFOUND=FALSE
+ ESTATEMENTENROLLED=FALSE
+ EXPIREDENROLLDATE=FALSE
+ PROMOFOUND=FALSE
+ ADDITIONALCOMMENT=""
+ PCACCESSFOUND=FALSE
+ BILLPAYFOUND=FALSE
+ ENOTICEFOUND=FALSE
+ DIRECTDEPOSITFOUND=FALSE
+ FOUNDMOBILE=FALSE
+ ESTATEFOUND=FALSE
+ FOUNDEDEPOSIT=FALSE
+ FOUNDMOBILEDEP=FALSE
+ SHAREID=""
+ 
+ FOR PROMOINDEX=0 TO PROMOCOUNT-1
+  DO
+   IF PROMOCODE=VALUE(PROMOFIELDS(PROMOINDEX,0)) AND 
+      ((SYSTEMDATE>=DATEVALUE(PROMOFIELDS(PROMOINDEX,2)) OR    [Start Date]
+        DATEVALUE(PROMOFIELDS(PROMOINDEX,2))='--/--/--') AND
+       (SYSTEMDATE<=DATEVALUE(PROMOFIELDS(PROMOINDEX,3)) OR    [End Date]
+        DATEVALUE(PROMOFIELDS(PROMOINDEX,3))='--/--/--' OR
+        PROMOEXPIRATION>SYSTEMDATE)) THEN 
+    DO
+     PROMOFOUND=TRUE
+[     SHAREID=""]
+     [A and N promotions may have different amounts for second credit]
+     IF (PROMOFIELDS(PROMOINDEX,10)="A" OR PROMOFIELDS(PROMOINDEX,10)="N") AND
+        MONEY(VALUE(PROMOFIELDS(PROMOINDEX,12)))<>$0.00 THEN
+      AMOUNTTOCREDIT=PROMOFIELDS(PROMOINDEX,12)
+     ELSE
+      AMOUNTTOCREDIT=PROMOFIELDS(PROMOINDEX,1)
+     IF PROMOFIELDS(PROMOINDEX,10)="A" OR  [New Member Savings Only Promo]
+        PROMOFIELDS(PROMOINDEX,10)="N" OR  [New Member Promo requiring eStatement]
+        PROMOFIELDS(PROMOINDEX,10)="S" THEN [eStatement Promo]
+      DO
+       FOR ACCOUNT ACCOUNT:NUMBER
+        DO
+         IF PROMOFIELDS(PROMOINDEX,10)="A" OR
+            PROMOFIELDS(PROMOINDEX,10)="N" THEN
+          DO
+           FOR EACH NOTE WITH ((NOTE:EXPIRATIONDATE='--/--/--' OR
+                                NOTE:EXPIRATIONDATE>SYSTEMDATE) AND
+                                NOTE:CODE=PROMONOTECODE)
+            DO
+             IF PROMOCODE=VALUE(SEGMENT(NOTE:TEXT:2,1,4)) THEN
+              DO
+               SHAREID=SEGMENT(NOTE:TEXT:3,1,4)
+              END
+            END
+          END
+         ELSE IF PROMOFIELDS(PROMOINDEX,10)="S" THEN
+          DO
+           FOR EACH SHARE WITH (SHARE:CLOSEDATE='--/--/--' AND
+                                SHARE:TYPE=VALUE(PROMOFIELDS(PROMOINDEX,8)))
+            DO
+             IF SHAREID="" THEN [Only allow the first share of its type]
+              SHAREID=SHARE:ID
+            END
+          END
+                             
+         [Checks invalid credit reasons]
+         FOR EACH SHARE WITH (SHARE:ID=SHAREID AND
+                              SHARE:CLOSEDATE='--/--/--')
+          DO
+           SHAREFOUND=TRUE
+
+           [Charged off Account, do not promo]
+           IF CHARGEOFFFOUND=TRUE THEN
+            DO
+             ADDITIONALCOMMENT="Not credited due to charge off"
+             CALL MOVEPROMOTONOTES
+            END
+           
+           [Check if eStatement enrollment has expired]
+           ELSE IF (PROMOFIELDS(PROMOINDEX,10)="A" OR PROMOFIELDS(PROMOINDEX,10)="N" OR 
+                    PROMOFIELDS(PROMOINDEX,10)="S") AND
+                   ((PROMOEXPIRATION<=SYSTEMDATE AND PROMOEXPIRATION<>'--/--/--') OR
+                    (DATEVALUE(PROMOFIELDS(PROMOINDEX,3))+VALUE(PROMOFIELDS(PROMOINDEX,5))<SYSTEMDATE AND
+                     DATEVALUE(PROMOFIELDS(PROMOINDEX,3))<>'--/--/--')) THEN
+
+            DO
+             ADDITIONALCOMMENT="eStatement enrollment date expired"
+             CALL MOVEPROMOTONOTES
+            END
+           [Check if member has enrolled in eStatement within allowed time frame.  Share Open Date +
+            Days allowed for New Member.  Promotion End Date + Days allowed for eStatement Promo]
+           ELSE IF (PROMOFIELDS(PROMOINDEX,10)="A" OR PROMOFIELDS(PROMOINDEX,10)="N" OR 
+                    PROMOFIELDS(PROMOINDEX,10)="S") AND
+                   (PROMOEXPIRATION>SYSTEMDATE OR PROMOEXPIRATION='--/--/--') AND
+                   (DATEVALUE(PROMOFIELDS(PROMOINDEX,3))='--/--/--' OR
+                    (DATEVALUE(PROMOFIELDS(PROMOINDEX,3))+VALUE(PROMOFIELDS(PROMOINDEX,5))>=SYSTEMDATE AND
+                     DATEVALUE(PROMOFIELDS(PROMOINDEX,3))<>'--/--/--')) AND
+                   (ACCOUNT:STATEMENTMAILCODE=20 OR
+                    ACCOUNT:STATEMENTMAILCODE=21 OR
+                    ACCOUNT:STATEMENTMAILCODE=22 OR
+                    ACCOUNT:STATEMENTMAILCODE=23) AND
+                   CHARGEOFFFOUND=FALSE THEN
+            DO
+             CALL CREDITPROMO
+             IF PROMOFIELDS(PROMOINDEX,10)="A" OR PROMOFIELDS(PROMOINDEX,10)="N" THEN
+              DO
+               ADDITIONALCOMMENT="Additional Services Credit"
+               CALL HOLDPROMO
+              END
+             CALL MOVEPROMOTONOTES
+            END
+          END  [For Each Share]
+         IF SHAREFOUND=FALSE THEN
+          DO
+           ADDITIONALCOMMENT="Not credited due to share closed or not found"
+           CALL MOVEPROMOTONOTES
+          END
+        END  [FOR ACCOUNT ACCOUNT:NUMBER]
+      END
+     ELSE IF PROMOFIELDS(PROMOINDEX,10)="C" THEN [New Member Promo requiring mobile banking & eStatement]
+      DO
+       [C promotions may have different amounts for second credit]
+       IF MONEY(VALUE(PROMOFIELDS(PROMOINDEX,12)))<>$0.00 THEN
+          AMOUNTTOCREDIT=PROMOFIELDS(PROMOINDEX,12)
+        ELSE
+         AMOUNTTOCREDIT=PROMOFIELDS(PROMOINDEX,1)
+       FOR ACCOUNT ACCOUNT:NUMBER
+        DO
+         IF PROMOFIELDS(PROMOINDEX,10)="C" THEN
+          DO
+           FOR EACH NOTE WITH ((NOTE:EXPIRATIONDATE='--/--/--' OR
+                                NOTE:EXPIRATIONDATE>SYSTEMDATE) AND
+                                NOTE:CODE=PROMONOTECODE)
+            DO
+             IF PROMOCODE=VALUE(SEGMENT(NOTE:TEXT:2,1,4)) THEN
+              DO
+               SHAREID=SEGMENT(NOTE:TEXT:3,1,4)
+              END
+            END
+          END
+         [Check for Last HB Logon Time by User 810 in last year]
+         FOR EACH FMHISTORY WITH (FMHISTORY:FMTYPE<>2 AND 
+                                  FMHISTORY:RECORDTYPE=37 AND 
+                                  FMHISTORY:POSTDATE>=DATEVALUE(PROMOFIELDS(PROMOINDEX,2)) AND
+                                  FMHISTORY:USERNUMBER=810)
+          DO
+           IF (FMHISTORY:POSTDATE<=PROMOEXPIRATION AND
+               PROMOEXPIRATION<>'--/--/--') OR
+              FMHISTORY:POSTDATE<=DATEVALUE(PROMOFIELDS(PROMOINDEX,3)) THEN
+            DO
+             FOUNDMOBILE=TRUE
+            END
+           ELSE 
+            DO
+             IF ((PROMOEXPIRATION<=SYSTEMDATE AND PROMOEXPIRATION<>'--/--/--') OR
+                 (DATEVALUE(PROMOFIELDS(PROMOINDEX,3))+VALUE(PROMOFIELDS(PROMOINDEX,5))<SYSTEMDATE AND
+                 DATEVALUE(PROMOFIELDS(PROMOINDEX,3))<>'--/--/--'))  THEN
+            DO
+             ADDITIONALCOMMENT="Mobile Banking enrollment date expired"
+             CALL MOVEPROMOTONOTES
+            END
+           END
+          END UNTIL (FOUNDMOBILE=TRUE OR FMHISTORY:POSTDATE<DATEVALUE(PROMOFIELDS(PROMOINDEX,2)))
+
+          [Check for eStatements on Account]
+          IF (ACCOUNT:STATEMENTMAILCODE=20 OR
+              ACCOUNT:STATEMENTMAILCODE=21 OR
+              ACCOUNT:STATEMENTMAILCODE=22 OR
+              ACCOUNT:STATEMENTMAILCODE=23) AND
+              (PROMOEXPIRATION>SYSTEMDATE OR PROMOEXPIRATION='--/--/--') AND
+               (DATEVALUE(PROMOFIELDS(PROMOINDEX,3))='--/--/--' OR
+               (DATEVALUE(PROMOFIELDS(PROMOINDEX,3))+VALUE(PROMOFIELDS(PROMOINDEX,5))>=SYSTEMDATE AND
+                DATEVALUE(PROMOFIELDS(PROMOINDEX,3))<>'--/--/--'))THEN
+           DO
+            ESTATEFOUND=TRUE
+           END
+          ELSE
+          DO
+          IF ((PROMOEXPIRATION<=SYSTEMDATE AND PROMOEXPIRATION<>'--/--/--') OR
+              (DATEVALUE(PROMOFIELDS(PROMOINDEX,3))+VALUE(PROMOFIELDS(PROMOINDEX,5))<SYSTEMDATE AND
+               DATEVALUE(PROMOFIELDS(PROMOINDEX,3))<>'--/--/--')) THEN
+           DO
+            ADDITIONALCOMMENT="eStatement enrollment date expired"
+            CALL MOVEPROMOTONOTES
+           END
+          END
+         FOR EACH SHARE WITH (SHARE:CLOSEDATE='--/--/--' AND SHARE:TYPE=VALUE(PROMOFIELDS(PROMOINDEX,8)))
+          DO
+           IF SHAREID="" THEN [Only allow the first share of its type]
+            SHAREID=SHARE:ID
+          END
+         FOR EACH SHARE WITH (SHARE:CLOSEDATE='--/--/--' AND
+                              SHARE:ID=SHAREID)
+          DO
+           SHAREFOUND=TRUE
+           [Charged off Account, do not promo]
+           IF CHARGEOFFFOUND=TRUE THEN
+            DO
+             ADDITIONALCOMMENT="Not credited due to charge off"
+             CALL MOVEPROMOTONOTES
+            END
+           [Check if member has enrolled in eStatement within allowed time frame and 
+            has enrolled in Mobile Banking within allowed time frame and does not have
+            a charged off share, deposit promo credit.]
+           ELSE IF FOUNDMOBILE=TRUE AND ESTATEFOUND=TRUE AND
+                   CHARGEOFFFOUND=FALSE THEN
+            DO
+             CALL CREDITPROMO
+             IF PROMOFIELDS(PROMOINDEX,10)="C" THEN
+              DO
+               ADDITIONALCOMMENT="Additional Services Credit"
+               CALL HOLDPROMO
+              END
+             CALL MOVEPROMOTONOTES
+            END
+          END  [For Each Share]
+         IF SHAREFOUND=FALSE THEN
+          DO
+           ADDITIONALCOMMENT="Not credited due to share closed or not found"
+           CALL MOVEPROMOTONOTES
+          END
+        END  [FOR ACCOUNT ACCOUNT:NUMBER]
+      END  [PROMOFIELDS(PROMOINDEX,10)="C"]
+     ELSE IF PROMOFIELDS(PROMOINDEX,10)="B" THEN [Bill Payment]
+      DO
+       FOR ACCOUNT ACCOUNT:NUMBER
+        DO
+         SHAREID=""
+         FOR EACH SHARE WITH (SHARE:SHARECODE>=0 AND SHARE:SHARECODE<=1 AND
+                              SHARE:CLOSEDATE='--/--/--')
+          DO
+           IF SHARE:TYPE=1 AND SHAREID="" THEN
+            SHAREID=SHARE:ID
+   
+           FOR EACH SHARE TRANSACTION WITH (SHARE TRANSACTION:POSTDATE>=DATEOFFSET(SYSTEMDATE,-6,0) AND
+                                            SHARE TRANSACTION:POSTDATE<=SYSTEMDATE AND
+                                            SHARE TRANSACTION:ACTIONCODE="C" AND
+                                            CHARACTERSEARCH(SHARE TRANSACTION:COMMENT,"BILL PAYMT")>0)
+            DO
+             BILLPAYFOUND=TRUE
+            END UNTIL (BILLPAYFOUND=TRUE OR SHARE TRANSACTION:POSTDATE<DATEOFFSET(SYSTEMDATE,-6,0))
+          END
+[        END]
+         FOR EACH SHARE WITH (SHARE:CLOSEDATE='--/--/--' AND
+                              SHARE:TYPE=VALUE(PROMOFIELDS(PROMOINDEX,8)))
+          DO
+           IF SHAREID="" THEN [Only allow the first share of its type]
+            SHAREID=SHARE:ID
+          END
+         FOR EACH SHARE WITH (SHARE:CLOSEDATE='--/--/--' AND
+                              SHARE:ID=SHAREID)
+          DO
+           SHAREFOUND=TRUE
+           [Charged off Account, do not promo]
+           IF CHARGEOFFFOUND=TRUE THEN
+            DO
+             ADDITIONALCOMMENT="Not credited due to charge off"
+             CALL MOVEPROMOTONOTES
+            END
+           ELSE IF (PROMOEXPIRATION<=SYSTEMDATE AND PROMOEXPIRATION<>'--/--/--') OR
+                   (DATEVALUE(PROMOFIELDS(PROMOINDEX,3))+VALUE(PROMOFIELDS(PROMOINDEX,5))<SYSTEMDATE AND
+                    DATEVALUE(PROMOFIELDS(PROMOINDEX,3))<>'--/--/--') THEN
+            DO
+             ADDITIONALCOMMENT="Bill Pay enrollment date expired"
+             CALL MOVEPROMOTONOTES
+            END
+           [Check if member has enrolled in Bill Pay within allowed time frame of promo ending +
+            days allowed to enroll]
+           ELSE IF BILLPAYFOUND=TRUE AND CHARGEOFFFOUND=FALSE THEN
+            DO
+             CALL CREDITPROMO
+             CALL MOVEPROMOTONOTES
+            END
+          END
+         IF SHAREFOUND=FALSE THEN
+          DO
+           ADDITIONALCOMMENT="Not credited due to share closed or not found"
+           CALL MOVEPROMOTONOTES
+          END
+        END [FOR ACCOUNT ACCOUNT:NUMBER]
+      END   [PROMOFIELDS(PROMOINDEX,10)="B"]
+     ELSE IF PROMOFIELDS(PROMOINDEX,10)="P" THEN [PC Access]
+      DO
+       FOR ACCOUNT ACCOUNT:NUMBER
+        DO
+         FOR EACH PREFERENCE
+          DO
+           IF PREFERENCE:HBLASTLOGONDATE<>'--/--/--' AND
+              (PREFERENCE:HBLASTLOGONDATE>=DATEVALUE(PROMOFIELDS(PROMOINDEX,2)) AND
+               PREFERENCE:HBLASTLOGONDATE<=DATEVALUE(PROMOFIELDS(PROMOINDEX,3))) AND
+              [PREFERENCE:HBLASTLOGONDATE>DATEOFFSET(SYSTEMDATE,-12,0) AND [could be triggered by only CUI]]
+              PREFERENCE:HBCALLCOUNT>0 THEN
+            PCACCESSFOUND=TRUE
+          END
+         FOR EACH SHARE WITH (SHARE:CLOSEDATE='--/--/--' AND
+                              SHARE:TYPE=VALUE(PROMOFIELDS(PROMOINDEX,8)))
+          DO
+           IF SHAREID="" THEN [Only allow the first share of its type]
+            SHAREID=SHARE:ID
+          END
+         FOR EACH SHARE WITH (SHARE:CLOSEDATE='--/--/--' AND
+                              SHARE:ID=SHAREID)
+          DO
+           SHAREFOUND=TRUE
+           [Charged off Account, do not promo]
+           IF CHARGEOFFFOUND=TRUE THEN
+            DO
+             ADDITIONALCOMMENT="Not credited due to charge off"
+             CALL MOVEPROMOTONOTES
+            END
+           ELSE IF (PROMOEXPIRATION<=SYSTEMDATE AND PROMOEXPIRATION<>'--/--/--') OR
+                   (DATEVALUE(PROMOFIELDS(PROMOINDEX,3))+VALUE(PROMOFIELDS(PROMOINDEX,5))<SYSTEMDATE AND
+                    DATEVALUE(PROMOFIELDS(PROMOINDEX,3))<>'--/--/--') THEN
+            DO
+             ADDITIONALCOMMENT="PC Access enrollment date expired"
+             CALL MOVEPROMOTONOTES
+            END
+           [Check if member has enrolled in PC Access within allowed time frame. Promo End Date + days allowed]
+           ELSE IF PCACCESSFOUND=TRUE AND
+                   (SYSTEMDATE<=DATEVALUE(PROMOFIELDS(PROMOINDEX,3))+VALUE(PROMOFIELDS(PROMOINDEX,5)) OR
+                    DATEVALUE(PROMOFIELDS(PROMOINDEX,3))='--/--/--') AND
+                   CHARGEOFFFOUND=FALSE THEN
+            DO
+             CALL CREDITPROMO
+             CALL MOVEPROMOTONOTES
+            END
+          END
+         IF SHAREFOUND=FALSE THEN
+          DO
+           ADDITIONALCOMMENT="Not credited due to share closed or not found"
+           CALL MOVEPROMOTONOTES
+          END
+        END
+      END
+     ELSE IF PROMOFIELDS(PROMOINDEX,10)="E" THEN [eNotice]
+      DO
+       FOR ACCOUNT ACCOUNT:NUMBER
+        DO
+         FOR EACH TRACKING WITH (TRACKING:TYPE=35 AND TRACKING:EXPIREDATE='--/--/--')
+          DO
+           IF TRACKING:USERCODE2=1 THEN
+            ENOTICEFOUND=TRUE
+          END
+         FOR EACH SHARE WITH (SHARE:CLOSEDATE='--/--/--' AND
+                              SHARE:TYPE=VALUE(PROMOFIELDS(PROMOINDEX,8)))
+          DO
+           IF SHAREID="" THEN [Only allow the first share of its type]
+            SHAREID=SHARE:ID
+          END
+         FOR EACH SHARE WITH (SHARE:CLOSEDATE='--/--/--' AND
+                              SHARE:ID=SHAREID)
+          DO
+           SHAREFOUND=TRUE
+           [Charged off Account, do not promo]
+           IF CHARGEOFFFOUND=TRUE THEN
+            DO
+             ADDITIONALCOMMENT="Not credited due to charge off"
+             CALL MOVEPROMOTONOTES
+            END
+           ELSE IF (PROMOEXPIRATION<=SYSTEMDATE AND PROMOEXPIRATION<>'--/--/--') OR
+                   (DATEVALUE(PROMOFIELDS(PROMOINDEX,3))+VALUE(PROMOFIELDS(PROMOINDEX,5))<SYSTEMDATE AND
+                    DATEVALUE(PROMOFIELDS(PROMOINDEX,3))<>'--/--/--') THEN
+            DO
+             ADDITIONALCOMMENT="eNotice enrollment date expired"
+             CALL MOVEPROMOTONOTES
+            END
+           [Check if member has enrolled in eNotice within allowed time frame. Promo End Date + days allowed]
+           ELSE IF ENOTICEFOUND=TRUE AND
+                   (SYSTEMDATE<=DATEVALUE(PROMOFIELDS(PROMOINDEX,3))+VALUE(PROMOFIELDS(PROMOINDEX,5)) OR
+                    DATEVALUE(PROMOFIELDS(PROMOINDEX,3))='--/--/--') AND
+                   CHARGEOFFFOUND=FALSE THEN
+            DO
+             CALL CREDITPROMO
+             CALL MOVEPROMOTONOTES
+            END
+          END
+         IF SHAREFOUND=FALSE THEN
+          DO
+           ADDITIONALCOMMENT="Not credited due to share closed or not found"
+           CALL MOVEPROMOTONOTES
+          END
+        END   [FOR ACCOUNT ACCOUNT:NUMBER]
+      END   [PROMOFIELDS(PROMOINDEX,10)="E"]
+     ELSE IF PROMOFIELDS(PROMOINDEX,10)="D" THEN [Chevron Gas Employee Direct Deposit]
+      DO
+       FOR ACCOUNT ACCOUNT:NUMBER
+        DO
+         FOR EACH SHARE WITH (SHARE:CLOSEDATE='--/--/--') 
+          DO
+           FOR EACH SHARE TRANSACTION WITH (CHARACTERSEARCH(SHARE TRANSACTION:STMTDESC:1,"Deposit ACH CHEVRON STATIONS")>0)
+            DO
+             DIRECTDEPOSITFOUND=TRUE
+            END UNTIL DIRECTDEPOSITFOUND=TRUE
+          END
+         FOR EACH SHARE WITH (SHARE:CLOSEDATE='--/--/--' AND
+                              SHARE:TYPE=VALUE(PROMOFIELDS(PROMOINDEX,8)))
+          DO
+           IF SHAREID="" THEN [Only allow the first share of its type]
+            SHAREID=SHARE:ID
+          END
+         FOR EACH SHARE WITH (SHARE:CLOSEDATE='--/--/--' AND
+                              SHARE:ID=SHAREID)
+          DO
+           SHAREFOUND=TRUE
+           [Charged off Account, do not promo]
+           IF CHARGEOFFFOUND=TRUE THEN
+            DO
+             ADDITIONALCOMMENT="Not credited due to charge off"
+             CALL MOVEPROMOTONOTES
+            END
+           [Check if member has enrolled in Direct Deposit within allowed time frame of promo ending +
+            days allowed to enroll]
+           ELSE IF (PROMOEXPIRATION<=SYSTEMDATE AND PROMOEXPIRATION<>'--/--/--') OR
+                   (DATEVALUE(PROMOFIELDS(PROMOINDEX,3))+VALUE(PROMOFIELDS(PROMOINDEX,5))<SYSTEMDATE AND
+                    DATEVALUE(PROMOFIELDS(PROMOINDEX,3))<>'--/--/--') THEN
+            DO
+             ADDITIONALCOMMENT="Direct Deposit enrollment date expired"
+             CALL MOVEPROMOTONOTES
+            END
+           ELSE IF DIRECTDEPOSITFOUND=TRUE AND CHARGEOFFFOUND=FALSE THEN
+            DO
+             CALL CREDITPROMO
+             CALL MOVEPROMOTONOTES
+            END
+          END
+         IF SHAREFOUND=FALSE THEN
+          DO
+           ADDITIONALCOMMENT="Not credited due to share closed or not found"
+           CALL MOVEPROMOTONOTES
+          END
+        END   [For ACCOUNT ACCOUNT:NUMBER]
+      END    [PROMOFIELDS(PROMOINDEX,10)="D"]
+     ELSE IF PROMOFIELDS(PROMOINDEX,10)="L" THEN [Mobile Banking]
+      DO
+       FOR ACCOUNT ACCOUNT:NUMBER
+        DO
+         [Check for Last HB Logon Time by User 810 in last year]
+         FOR EACH FMHISTORY WITH (FMHISTORY:FMTYPE<>2 AND 
+                                  FMHISTORY:RECORDTYPE=37 AND 
+                                  [FMHISTORY:FIELDNUMBER=51 AND]
+                                  FMHISTORY:POSTDATE>=DATEVALUE(PROMOFIELDS(PROMOINDEX,2)) AND
+                                  FMHISTORY:USERNUMBER=810)
+          DO
+           FOUNDMOBILE=TRUE
+          END UNTIL (FOUNDMOBILE=TRUE OR FMHISTORY:POSTDATE<DATEVALUE(PROMOFIELDS(PROMOINDEX,2)))
+  
+         FOR EACH SHARE WITH (SHARE:CLOSEDATE='--/--/--' AND SHARE:TYPE=VALUE(PROMOFIELDS(PROMOINDEX,8)))
+          DO
+           IF SHAREID="" THEN [Only allow the first share of its type]
+            SHAREID=SHARE:ID
+          END
+         FOR EACH SHARE WITH (SHARE:CLOSEDATE='--/--/--' AND
+                              SHARE:ID=SHAREID)
+          DO
+           SHAREFOUND=TRUE
+           [Charged off Account, do not promo]
+           IF CHARGEOFFFOUND=TRUE THEN
+            DO
+             ADDITIONALCOMMENT="Not credited due to charge off"
+             CALL MOVEPROMOTONOTES
+            END
+           ELSE IF (PROMOEXPIRATION<=SYSTEMDATE AND PROMOEXPIRATION<>'--/--/--') OR
+                   (DATEVALUE(PROMOFIELDS(PROMOINDEX,3))+VALUE(PROMOFIELDS(PROMOINDEX,5))<SYSTEMDATE AND
+                    DATEVALUE(PROMOFIELDS(PROMOINDEX,3))<>'--/--/--') THEN
+            DO
+             ADDITIONALCOMMENT="Mobile Banking enrollment date expired"
+             CALL MOVEPROMOTONOTES
+            END
+           [Check if member has enrolled in Mobile Banking within allowed time frame. Promo End Date + days allowed]
+           ELSE IF FOUNDMOBILE=TRUE AND
+                   (SYSTEMDATE<=DATEVALUE(PROMOFIELDS(PROMOINDEX,3))+VALUE(PROMOFIELDS(PROMOINDEX,5)) OR
+                    DATEVALUE(PROMOFIELDS(PROMOINDEX,3))='--/--/--') AND
+                   CHARGEOFFFOUND=FALSE THEN
+            DO
+             CALL CREDITPROMO
+             CALL MOVEPROMOTONOTES
+            END
+          END
+         IF SHAREFOUND=FALSE THEN
+          DO
+           ADDITIONALCOMMENT="Not credited due to share closed or not found"
+           CALL MOVEPROMOTONOTES
+          END
+        END   [For ACCOUNT ACCOUNT:NUMBER]
+      END   [PROMOFIELDS(PROMOINDEX,10)="L"]
+     ELSE IF PROMOFIELDS(PROMOINDEX,10)="X" THEN [eDeposit]
+      DO
+       FOR ACCOUNT ACCOUNT:NUMBER
+        DO
+         [Check for eDeposit or Mobile Deposit]
+         TRANSHRID=""
+         FOR EACH SHARE WITH (SHARE:CLOSEDATE='--/--/--')
+          DO
+           TRANSHRID=SHARE:ID
+           FOR EACH SHARE TRANSACTION WITH (SHARE TRANSACTION:ID=TRANSHRID AND
+                                           (SHARE TRANSACTION:POSTDATE>=DATEVALUE(PROMOFIELDS(PROMOINDEX,2)) AND
+                                            SHARE TRANSACTION:POSTDATE<=DATEVALUE(PROMOFIELDS(PROMOINDEX,3))) AND
+                                            SHARE TRANSACTION:USERNUMBER=897 AND
+                                            CHARACTERSEARCH(UPPERCASE(SHARE TRANSACTION:COMMENT),"CU EDEPOSIT")>0)
+            DO
+             FOUNDEDEPOSIT=TRUE
+            END UNTIL (FOUNDEDEPOSIT=TRUE OR SHARE TRANSACTION:POSTDATE<DATEVALUE(PROMOFIELDS(PROMOINDEX,2)))
+
+           FOR EACH SHARE TRANSACTION WITH (SHARE TRANSACTION:ID=TRANSHRID AND
+                                           (SHARE TRANSACTION:POSTDATE>=DATEVALUE(PROMOFIELDS(PROMOINDEX,2)) AND
+                                            SHARE TRANSACTION:POSTDATE<=DATEVALUE(PROMOFIELDS(PROMOINDEX,3))) AND
+                                            (CHARACTERSEARCH(UPPERCASE(SHARE TRANSACTION:STMTDESC:1),"CU MOBILE DEPOSIT")>0 OR
+                                             CHARACTERSEARCH(UPPERCASE(SHARE TRANSACTION:COMMENT),"CU EDEPOSIT")>0 OR                                            [ CHARACTERSEARCH(UPPERCASE(SHARE TRANSACTION:STMTDESC:1),"FCU MOBILE DEPOSIT")>0 OR]
+                                             CHARACTERSEARCH(UPPERCASE(SHARE TRANSACTION:COMMENT),"CU MOBILE DEPOSIT")>0))
+            DO
+             FOUNDMOBILEDEP=TRUE
+            END UNTIL (FOUNDMOBILEDEP=TRUE OR SHARE TRANSACTION:POSTDATE<DATEVALUE(PROMOFIELDS(PROMOINDEX,2)))                                            
+          END
+           
+         FOR EACH SHARE WITH (SHARE:CLOSEDATE='--/--/--' AND SHARE:TYPE=VALUE(PROMOFIELDS(PROMOINDEX,8)))
+          DO
+           IF SHAREID="" THEN [Only allow the first share of its type]
+            SHAREID=SHARE:ID
+          END
+         FOR EACH SHARE WITH (SHARE:CLOSEDATE='--/--/--' AND
+                              SHARE:ID=SHAREID)
+          DO
+           SHAREFOUND=TRUE
+           [Charged off Account, do not promo]
+           IF CHARGEOFFFOUND=TRUE THEN
+            DO
+             ADDITIONALCOMMENT="Not credited due to charge off"
+             CALL MOVEPROMOTONOTES
+            END
+           ELSE IF (PROMOEXPIRATION<=SYSTEMDATE AND PROMOEXPIRATION<>'--/--/--') OR
+                   (DATEVALUE(PROMOFIELDS(PROMOINDEX,3))+VALUE(PROMOFIELDS(PROMOINDEX,5))<SYSTEMDATE AND
+                    DATEVALUE(PROMOFIELDS(PROMOINDEX,3))<>'--/--/--') THEN
+            DO
+             ADDITIONALCOMMENT="eDeposit promo date expired"
+             CALL MOVEPROMOTONOTES
+            END
+           [Check if member has performed an eDeposit transaction within allowed time frame. Promo End Date + days allowed]
+           ELSE IF (FOUNDEDEPOSIT=TRUE OR
+                    FOUNDMOBILEDEP=TRUE) AND
+                   (SYSTEMDATE<=DATEVALUE(PROMOFIELDS(PROMOINDEX,3))+VALUE(PROMOFIELDS(PROMOINDEX,5)) OR
+                    DATEVALUE(PROMOFIELDS(PROMOINDEX,3))='--/--/--') AND
+                   CHARGEOFFFOUND=FALSE THEN
+            DO
+             CALL CREDITPROMO
+             CALL MOVEPROMOTONOTES
+            END
+          END
+         IF SHAREFOUND=FALSE THEN
+          DO
+           ADDITIONALCOMMENT="Not credited due to share closed or not found"
+           CALL MOVEPROMOTONOTES
+          END
+        END   [For ACCOUNT ACCOUNT:NUMBER]
+      END   [PROMOFIELDS(PROMOINDEX,10)="X"]
+     ELSE IF PROMOFIELDS(PROMOINDEX,10)="W" THEN [ATM Convenience]
+      DO
+       FOR ACCOUNT ACCOUNT:NUMBER
+        DO
+         [Check for 3 or more ATM Withdrawals/Deposits]
+         ATMTRANCOUNT=0
+         FOR EACH SHARE
+          DO
+           FOR EACH SHARE TRANSACTION WITH ((SHARE TRANSACTION:POSTDATE>=DATEVALUE(PROMOFIELDS(PROMOINDEX,2)) AND
+                                             SHARE TRANSACTION:POSTDATE<=DATEVALUE(PROMOFIELDS(PROMOINDEX,3))) AND
+                                            SHARE TRANSACTION:USERNUMBER=898 AND
+                                            SHARE TRANSACTION:SOURCECODE="A" AND
+                                            (SHARE TRANSACTION:ACTIONCODE="D" OR
+                                             SHARE TRANSACTION:ACTIONCODE="W")) 
+            DO
+             ATMTRANCOUNT=ATMTRANCOUNT+1
+            END UNTIL (SHARE TRANSACTION:POSTDATE<DATEVALUE(PROMOFIELDS(PROMOINDEX,2)))  [FOR EACH SHARE TRANS]
+          END   [FOR EACH SHARE] 
+           
+         FOR EACH SHARE WITH (SHARE:CLOSEDATE='--/--/--' AND SHARE:TYPE=VALUE(PROMOFIELDS(PROMOINDEX,8)))
+          DO
+           IF SHAREID="" THEN [Only allow the first share of its type]
+            SHAREID=SHARE:ID
+          END   [FOR EACH SHARE]
+         FOR EACH SHARE WITH (SHARE:CLOSEDATE='--/--/--' AND
+                              SHARE:ID=SHAREID)
+          DO
+           SHAREFOUND=TRUE
+           [Charged off Account, do not promo]
+           IF CHARGEOFFFOUND=TRUE THEN
+            DO
+             ADDITIONALCOMMENT="Not credited due to charge off"
+             CALL MOVEPROMOTONOTES
+            END   [CHARGEOFFFOUND=TRUE]
+           ELSE IF (PROMOEXPIRATION<=SYSTEMDATE AND PROMOEXPIRATION<>'--/--/--') OR
+                   (DATEVALUE(PROMOFIELDS(PROMOINDEX,3))+VALUE(PROMOFIELDS(PROMOINDEX,5))<SYSTEMDATE AND
+                    DATEVALUE(PROMOFIELDS(PROMOINDEX,3))<>'--/--/--') THEN
+            DO
+             ADDITIONALCOMMENT="ATM promo date expired"
+             CALL MOVEPROMOTONOTES
+            END   [ELSE IF]
+          END   [FOR EACH SHARE]
+           IF ATMTRANCOUNT>=3 AND
+                   (SYSTEMDATE<=DATEVALUE(PROMOFIELDS(PROMOINDEX,3))+VALUE(PROMOFIELDS(PROMOINDEX,5)) OR
+                    DATEVALUE(PROMOFIELDS(PROMOINDEX,3))='--/--/--') AND
+                   CHARGEOFFFOUND=FALSE THEN
+            DO
+             CALL CREDITPROMO
+             CALL MOVEPROMOTONOTES
+            END
+         IF SHAREFOUND=FALSE THEN
+          DO
+           ADDITIONALCOMMENT="Not credited due to share closed or not found"
+           CALL MOVEPROMOTONOTES
+          END
+        END   [For ACCOUNT ACCOUNT:NUMBER]
+      END   [PROMOFIELDS(PROMOINDEX,10)="W"]
+      
+     [Move any promos that do not require an additional credit to notes]
+     ELSE
+      DO
+       ADDITIONALCOMMENT="No Further Action or Expired"
+       CALL MOVEPROMOTONOTES
+      END
+    END
+   [Do nothing if promotion is not active yet]
+   ELSE IF PROMOCODE=VALUE(PROMOFIELDS(PROMOINDEX,0)) AND 
+           (SYSTEMDATE<DATEVALUE(PROMOFIELDS(PROMOINDEX,2)) OR    [Start Date]
+            DATEVALUE(PROMOFIELDS(PROMOINDEX,2))='--/--/--') THEN 
+    DO
+     PROMOFOUND=TRUE
+    END
+  END
+ IF PROMOFOUND=FALSE THEN
+  DO
+   ADDITIONALCOMMENT="No Further Action or Promo Code Expired"
+   CALL MOVEPROMOTONOTES
+  END
+END
+
+PROCEDURE CREDITPROMO
+ TOTALCREDITS=MONEY(VALUE(AMOUNTTOCREDIT))+TOTALCREDITS
+ OUTPUTSWITCH(OC2,ERRORTEXT)
+ SHAREDIVINDEX=-1
+ SHAREDIVAVAILABLE=-1
+ 
+ [This loop is to keep updating the fields internally to the variables otherwise the FM
+  will bomb out because the to and from values are not correct after each update if there
+  is more than one credit at a time.]
+ 
+ FOR I=0 TO 6
+  DO
+   IF SHAREIDDIVARRAY(I)=SHARE:ID THEN
+    DO
+     SHAREDIVINDEX=I
+     SHAREDIVYTD=SHAREDIVYTDARRAY(I)
+     SHARELASTDIVDATE=SHARELASTDIVDATEARRAY(I)
+     SHARELASTDIVAMOUNT=SHARELASTDIVAMOUNTARRAY(I)
+     SHAREDIVFROMOPEN=SHAREDIVFROMOPENARRAY(I)
+     SHAREDIVYTDARRAY(I)=SHAREDIVYTD+MONEY(VALUE(AMOUNTTOCREDIT))
+     SHARELASTDIVDATEARRAY(I)=SYSTEMDATE
+     SHARELASTDIVAMOUNTARRAY(I)=MONEY(VALUE(AMOUNTTOCREDIT))
+     SHAREDIVFROMOPENARRAY(I)=SHAREDIVFROMOPEN+MONEY(VALUE(AMOUNTTOCREDIT))
+    END
+   IF SHAREDIVAVAILABLE=-1 AND SHAREIDDIVARRAY(I)="" THEN
+    SHAREDIVAVAILABLE=I
+  END
+ IF SHAREDIVINDEX=-1 THEN
+  DO
+   SHAREDIVYTD=SHARE:DIVYTD
+   SHARELASTDIVDATE=SHARE:LASTDIVDATE
+   SHARELASTDIVAMOUNT=SHARE:LASTDIVAMOUNT
+   SHAREDIVFROMOPEN=SHARE:DIVFROMOPEN
+   SHAREIDDIVARRAY(SHAREDIVAVAILABLE)=SHARE:ID
+   SHAREDIVYTDARRAY(SHAREDIVAVAILABLE)=SHARE:DIVYTD+MONEY(VALUE(AMOUNTTOCREDIT))
+   SHARELASTDIVDATEARRAY(SHAREDIVAVAILABLE)=SYSTEMDATE
+   SHARELASTDIVAMOUNTARRAY(SHAREDIVAVAILABLE)=MONEY(VALUE(AMOUNTTOCREDIT))
+   SHAREDIVFROMOPENARRAY(SHAREDIVAVAILABLE)=SHARE:DIVFROMOPEN+MONEY(VALUE(AMOUNTTOCREDIT))
+  END
+ 
+ COL=001 ACCOUNT:NUMBER+"  S  "+SHAREID+"  D  "
+ PRINT AMOUNTTOCREDIT+"  "
+ PRINT FORMAT("999",VALUE(PROMOFIELDS(PROMOINDEX,9)))+"  "
+ PRINT PROMOFIELDS(PROMOINDEX,4)
+ NEWLINE
+ OUTPUTSWITCH(OUTPUTCHANNELDEFAULT,ERRORTEXT)
+ COL=001 "ACCOUNT "+ACCOUNT:NUMBER+" MODIFY SHARE "+SHAREID
+ NEWLINE
+ COL=002 "CHANGE DIVYTD FROM "
+ PRINT SHAREDIVYTD
+ PRINT " TO "
+ PRINT SHAREDIVYTD+MONEY(VALUE(AMOUNTTOCREDIT))
+ NEWLINE
+ COL=002 "CHANGE LASTDIVDATE FROM "
+ PRINT SHARELASTDIVDATE
+ PRINT " TO "
+ PRINT FORMAT("99/99/9999",SYSTEMDATE)
+ NEWLINE
+ COL=002 "CHANGE LASTDIVAMOUNT FROM "
+ PRINT SHARELASTDIVAMOUNT
+ PRINT " TO "+AMOUNTTOCREDIT
+ NEWLINE
+ COL=002 "CHANGE DIVFROMOPEN FROM "
+ PRINT SHAREDIVFROMOPEN
+ PRINT " TO "
+ PRINT SHAREDIVFROMOPEN+MONEY(VALUE(AMOUNTTOCREDIT))
+ NEWLINE
+ NEWLINE
+END
+
+PROCEDURE HOLDPROMO
+ IF PROMOFIELDS(PROMOINDEX,6)="D" THEN
+  HOLDUNTIL=SHARE:OPENDATE+VALUE(PROMOFIELDS(PROMOINDEX,7))
+ ELSE
+  HOLDUNTIL=DATEOFFSET(SHARE:OPENDATE,VALUE(PROMOFIELDS(PROMOINDEX,7)),0)
+ 
+ COL=001 "ACCOUNT "+ACCOUNT:NUMBER+" CREATE SHARE "+SHAREID+
+         " HOLD LOC BEFOREFIRST"
+ NEWLINE
+ PRINT " SET TYPE TO 0"
+ NEWLINE
+ PRINT " SET EFFECTIVEDATE TO "
+ PRINT SHARE:OPENDATE
+ NEWLINE
+ PRINT " SET EXPIRATIONDATE TO "
+ PRINT HOLDUNTIL
+ NEWLINE
+ PRINT " SET AMOUNT TO "
+ PRINT AMOUNTTOCREDIT
+ NEWLINE
+ PRINT " SET REFERENCE1 TO "
+ COL=049 "PROMO"
+ NEWLINE
+ PRINT " SET REFERENCE2 TO "
+ COL=049 FORMAT("9999",VALUE(PROMOFIELDS(PROMOINDEX,0)))
+ NEWLINE
+END
+
+PROCEDURE MOVEPROMOTONOTES
+ [Remove from Account Record]
+ PROMOCODETOMOVE=0
+ PRINT "ACCOUNT "+ACCOUNT:NUMBER+" MODIFY TRACKING LOC "
+ PRINT TRACKINGLOCATOR
+ NEWLINE
+ IF REPORTCODEINDEX=1 THEN
+  PRINT " CHANGE USERNUMBER1 FROM "
+ ELSE IF REPORTCODEINDEX=2 THEN
+  PRINT " CHANGE USERNUMBER2 FROM "
+ ELSE IF REPORTCODEINDEX=3 THEN
+  PRINT " CHANGE USERNUMBER3 FROM "
+ ELSE IF REPORTCODEINDEX=4 THEN
+  PRINT " CHANGE USERNUMBER4 FROM "
+ ELSE IF REPORTCODEINDEX=5 THEN
+  PRINT " CHANGE USERNUMBER5 FROM "
+ ELSE IF REPORTCODEINDEX=6 THEN
+  PRINT " CHANGE USERNUMBER6 FROM "
+
+ COL=049 PROMOCODE
+ COL=089 " TO 0"
+ NEWLINE
+ 
+ IF REPORTCODEINDEX=1 THEN
+  PRINT " CHANGE USERDATE2 FROM "
+ ELSE IF REPORTCODEINDEX=2 THEN
+  PRINT " CHANGE USERDATE3 FROM "
+ ELSE IF REPORTCODEINDEX=3 THEN
+  PRINT " CHANGE USERDATE4 FROM "
+ ELSE IF REPORTCODEINDEX=4 THEN
+  PRINT " CHANGE USERDATE5 FROM "
+ ELSE IF REPORTCODEINDEX=5 THEN
+  PRINT " CHANGE USERDATE6 FROM "
+ ELSE IF REPORTCODEINDEX=6 THEN
+  PRINT " CHANGE USERDATE7 FROM "
+
+ COL=049 PROMOEXPIRATION
+ COL=089 " TO --/--/--"
+ NEWLINE
+ 
+ [Put on Note Record]
+ PRINT "ACCOUNT "+ACCOUNT:NUMBER+" CREATE NOTE LOC BEFOREFIRST"
+ NEWLINE
+ PRINT " SET EXPIRATIONDATE TO "
+ PRINT FORMAT("99/99/9999",DATEOFFSET(SYSTEMDATE,24,0))
+ NEWLINE
+ PRINT " SET CODE TO "
+ PRINT PROMONOTECODE
+ NEWLINE
+ PRINT " SET TEXT:1 TO "
+ COL=049 "Marketing Promotion Code *DO NOT MODIFY*"
+ NEWLINE
+ PRINT " SET TEXT:2 TO "
+ COL=049 FORMAT("9999",PROMOCODE)+" "+PROMOFIELDS(PROMOINDEX,4)+" "+PROMOFIELDS(PROMOINDEX,2)+
+         "-"+PROMOFIELDS(PROMOINDEX,3)
+ NEWLINE
+ PRINT " SET TEXT:3 TO "
+ COL=049 SHAREID
+ NEWLINE
+ PRINT " SET TEXT:4 TO "
+ COL=049 FORMAT("99/99/99",SYSTEMDATE)
+ NEWLINE
+ IF ADDITIONALCOMMENT<>"" THEN
+  DO
+   PRINT " SET TEXT:5 TO "
+   COL=049 ADDITIONALCOMMENT
+   NEWLINE
+  END
+  
+ OUTPUTSWITCH(OC3,ERRORTEXT)
+ COL=001 ACCOUNT:NUMBER
+ COL=015 SHAREID
+ COL=023 FORMAT("9999",PROMOCODE)
+ COL=035 AMOUNTTOCREDIT
+ COL=045 ADDITIONALCOMMENT
+ NEWLINE
+ OUTPUTSWITCH(OUTPUTCHANNELDEFAULT,ERRORTEXT)
+END
+
+PROCEDURE ADDLEADINGZEROS
+ WHILE LENGTH(TRANSHRID)<4
+  DO
+   TRANSHRID="0"+TRANSHRID
+  END
+END   
+
+#INCLUDE "CFCU.PRO"
+
